@@ -100,10 +100,16 @@ These steps create the Storage Account (and two storage containers) in the same 
       --resource-group $RESOURCEGROUP \
       --location $LOCATION \
       --sku Standard_RAGRS \
+      --public-network-access Disabled \
+      --allow-blob-public-access false \
+      --min-tls-version TLS1_2 \ 
       --kind StorageV2
    # Fetch the Azure storage key
    AZR_STORAGE_KEY=$(az storage account keys list -g "${RESOURCEGROUP}" \
       -n "${AZR_STORAGE_ACCOUNT_NAME}" --query "[0].value" -o tsv)
+   ```
+   NOTE: This may not work due to the account being private. If not, the simplest thing to do is to create the container via the console
+   ```bash
    # Create Azure Storage Containers
    az storage container create --name "${CLUSTER}-metrics" \
      --account-name "${AZR_STORAGE_ACCOUNT_NAME}" \
@@ -113,6 +119,75 @@ These steps create the Storage Account (and two storage containers) in the same 
      --account-key "${AZR_STORAGE_KEY}"
    ```
 
+### Create subnet for services
+Be sure to set the VNET for your cluster.
+```
+export VNET=aro-vnet-
+export SERVICES_SUBNET=services-subnet
+export CONNECTION_NAME=grafana-link
+```
+Create the services subnet. Be sure to set an appropriate CIDR for this subnet within your ARO network.
+```
+az network vnet subnet create \
+    --name $SERVICES_SUBNET \
+    --resource-group $RESOURCEGROUP \
+    --vnet-name $VNET \
+    --address-prefix 10.0.0.32/27
+```
+
+### Create a private endpoint
+```bash
+az network private-endpoint create \
+  --name $AZR_STORAGE_ACCOUNT_NAME \
+  --resource-group $RESOURCEGROUP \
+  --vnet-name $VNET \
+  --subnet $SERVICES_SUBNET \
+  --private-connection-resource-id $(az storage account show --name $AZR_STORAGE_ACCOUNT_NAME --resource-group $RESOURCEGROUP --query 'id' --output tsv) \
+  --connection-name $CONNECTION_NAME \
+  --group-ids blob
+```
+### Create private DNS zone
+
+```bash
+az network private-dns zone create \
+  --resource-group $RESOURCEGROUP \
+  --name "$AZR_STORAGE_ACCOUNT_NAME.blob.core.windows.net"
+```
+
+```bash
+az network private-dns link vnet create \
+  --resource-group $RESOURCEGROUP \
+  --zone-name "$AZR_STORAGE_ACCOUNT_NAME.blob.core.windows.net" \
+  --name $CLUSTER \
+  --virtual-network $VNET \
+  --registration-enabled false
+```
+
+```bash
+PRIVATE_IP=`az resource show \
+  --ids $(az network private-endpoint show --name $AZR_STORAGE_ACCOUNT_NAME --resource-group $RESOURCEGROUP --query 'networkInterfaces[0].id' -o tsv) \
+  --api-version 2019-04-01 \
+  -o json | jq -r '.properties.ipConfigurations[0].properties.privateIPAddress'`
+```
+### Create the DNS records for the private link connection:
+
+```bash
+az network private-dns record-set a create \
+  --name $AZR_STORAGE_ACCOUNT_NAME \
+  --zone-name "$AZR_STORAGE_ACCOUNT_NAME.blob.core.windows.net" \
+  --resource-group $RESOURCEGROUP
+```
+```bash
+az network private-dns record-set a add-record \
+  --record-set-name $AZR_STORAGE_ACCOUNT_NAME \
+  --zone-name "$AZR_STORAGE_ACCOUNT_NAME.blob.core.windows.net" \
+  --resource-group $RESOURCEGROUP \
+  -a $PRIVATE_IP
+```
+
+```bash
+ENDPOINT=$(az network private-endpoint show --name $AZR_STORAGE_ACCOUNT_NAME --resource-group $RESOURCEGROUP --query 'customDnsConfigs[0].fqdn' -o tsv)
+```
 ### Configure MOBB Helm Repository
 
 Helm charts do a lot of the heavy lifting for us, and reduce the need for us to copy/paste a pile of YAML. The Managed OpenShift Black Belt team maintain these charts [here](https://github.com/rh-mobb/helm-charts/).
@@ -275,8 +350,26 @@ Next we can configure Metrics Federation to Azure Blob Storage. This is done by 
       --set "aro.storageAccountKey=${AZR_STORAGE_KEY}" \
       --set "aro.storageContainer=${CLUSTER}-metrics" \
       --set "enableUserWorkloadMetrics=true"
-  ```
+   ```
+### Update secret to use private endpoint
+```bash
+oc get secret aro-thanos-af-af-creds -n mobb-aro-obs -o jsonpath="{.data.store-secret\.yaml}" | base64 --decode > store-secret.yaml
+```
+```bash
+awk -v endpoint="$ENDPOINT" '
+/config:/ { print; print "  endpoint: \"" endpoint "\""; next }
+{ print }
+' store-secret.yaml > store-secret.yaml
+```
+If you're not using a certificate, set tls-skip-verify to true
+```bash
+echo -e "http_config:\n  insecure_skip_verify: true" >> store-secret.yaml
+```
 
+Update secret
+```bash
+oc set data secret/aro-thanos-af-af-creds -n mobb-aro-obs --from-file=store-secret.yaml
+```
 ## Configure Logs Federation to Azure Blob Storage
 
 Next we need to deploy the Cluster Logging and Loki Operators so that we can use the `mobb/aro-clf-blob` Helm Chart to deploy and configure Cluster Log Forwarding and the Loki Stack to store metrics in Azure Blob.
@@ -332,7 +425,7 @@ Next we need to deploy the Cluster Logging and Loki Operators so that we can use
 
    ```bash
    helm upgrade -n "${NAMESPACE}" aro-clf-blob \
-      --install mobb/aro-clf-blob --version 0.1.1 \
+      --install mobb/aro-clf-blob --version 0.1.3 \
       --set "azure.storageAccount=${AZR_STORAGE_ACCOUNT_NAME}" \
       --set "azure.storageAccountKey=${AZR_STORAGE_KEY}" \
       --set "azure.storageContainer=${CLUSTER}-logs"
