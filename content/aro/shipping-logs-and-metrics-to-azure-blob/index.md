@@ -138,7 +138,7 @@ az network vnet subnet create \
 ### Create a private endpoint
 ```bash
 az network private-endpoint create \
-  --name $AZR_STORAGE_ACCOUNT_NAME \
+  --name $AZR_STORAGE_ACCOUNT_NAME-pe \
   --resource-group $RESOURCEGROUP \
   --vnet-name $VNET \
   --subnet $SERVICES_SUBNET \
@@ -151,7 +151,7 @@ az network private-endpoint create \
 ```bash
 az network private-dns zone create \
   --resource-group $RESOURCEGROUP \
-  --name "$AZR_STORAGE_ACCOUNT_NAME.blob.core.windows.net"
+  --name "$AZR_STORAGE_ACCOUNT_NAME-pe.blob.core.windows.net"
 ```
 
 ```bash
@@ -353,20 +353,20 @@ Next we can configure Metrics Federation to Azure Blob Storage. This is done by 
    ```
 ### Update secret to use private endpoint
 ```bash
-oc get secret aro-thanos-af-af-creds -n mobb-aro-obs -o jsonpath="{.data.store-secret\.yaml}" | base64 --decode > store-secret.yaml
+oc get secret aro-thanos-af-af-creds -n mobb-aro-obs -o jsonpath="{.data.store-secret\.yaml}" | base64 --decode > thanos-secret.yaml
 ```
 ```bash
 awk -v endpoint="$ENDPOINT" '
 /config:/ { print; print "  endpoint: \"" endpoint "\""; next }
 { print }
-' store-secret.yaml > store-secret.yaml
+' thanos-secret.yaml > store-secret.yaml
 ```
 If you're not using a certificate, set tls-skip-verify to true
 ```bash
-echo -e "http_config:\n  insecure_skip_verify: true" >> store-secret.yaml
+echo -e "  http_config:\n    insecure_skip_verify: true" >> store-secret.yaml
 ```
 
-Update secret
+Update thanos secret
 ```bash
 oc set data secret/aro-thanos-af-af-creds -n mobb-aro-obs --from-file=store-secret.yaml
 ```
@@ -461,7 +461,18 @@ Next we need to deploy the Cluster Logging and Loki Operators so that we can use
    ```bash
    oc -n openshift-logging rollout restart daemonset collector
    ```
+1. Update the loki secret for the private endpoint
+```bash
+oc get secret logging-loki-azure -n openshift-logging -o yaml > logging-loki-azure.yaml
+```
 
+```bash
+awk -v endpoint="$ENDPOINT_ENCODED" '/environment:/ {
+    print $0
+    print "  endpoint_suffix:", endpoint
+    next
+}1' logging-loki-azure.yaml | oc apply -f - -n openshift-logging
+```
 ## Validate Metrics and Logs
 
 Now that the Metrics and Log forwarding is set up we can view them in Grafana.
