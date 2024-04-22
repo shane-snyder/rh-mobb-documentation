@@ -188,33 +188,39 @@ This is required to provide credentials to the cluster to pull various Red Hat i
 
 ## Configure Metrics Federation to Azure Blob Storage
 
-Next we can configure Metrics Federation to Azure Blob Storage. This is done by deploying the Grafana Operator (to install Grafana to view the metrics later) and the Resource Locker Operator (to configure the User Workload Metrics) and then the `mobb/aro-thanos-af` Helm Chart to Deploy and Configure Thanos and Grafana Agent to store and retrieve the metrics in Azure Blob.
+Next we can configure Metrics Federation to Azure Blob Storage. This is done by deploying the Grafana Operator (to install Grafana to view the metrics later) and the Patch Operator (to configure the User Workload Metrics) and then the `mobb/aro-thanos-af` Helm Chart to Deploy and Configure Thanos and prometheus remote write to store and retrieve the metrics in Azure Blob.
 
 ### Grafana Operator
 
 1. Deploy the Grafana Operator
 
    ```bash
-   # Create a file containing the Grafana operator
-   mkdir -p $WORKDIR/metrics
-   cat <<EOF > $WORKDIR/metrics/grafana-operator.yaml
-   subscriptions:
-     - name: grafana-operator
-       channel: v4
-       installPlanApproval: Automatic
-       source: community-operators
-       sourceNamespace: openshift-marketplace
-       startingCSV: grafana-operator.v4.7.0
-
-   operatorGroups:
-     - name: ${NAMESPACE}
-       targetNamespace: ~
+   cat << EOF | oc create -f -
+   apiVersion: operators.coreos.com/v1
+   kind: OperatorGroup
+   metadata:
+      generateName: grafana-operator-
+      namespace: ${NAMESPACE}
+   spec:
+      targetNamespaces:
+      - ${NAMESPACE}
+   ---
+   apiVersion: operators.coreos.com/v1alpha1
+   kind: Subscription
+   metadata:
+      generateName: grafana-operator-
+      namespace: ${NAMESPACE}
+   spec:
+      channel: v5
+      name: grafana-operator
+      installPlanApproval: Automatic
+      source: community-operators
+      sourceNamespace: openshift-marketplace
+      startingCSV: grafana-operator.v5.8.0
    EOF
-   # Deploy the Grafana Operator using Helm
-   helm upgrade -n "${NAMESPACE}" clf-operators \
-      mobb/operatorhub --install \
-      --values "${WORKDIR}/metrics/grafana-operator.yaml"
-   # Wait for the Grafana Operator to be installed
+
+   ```
+   ```bash
    while ! oc get grafana; do sleep 5; echo -n .; done
    ```
 
@@ -223,44 +229,6 @@ Next we can configure Metrics Federation to Azure Blob Storage. This is done by 
    ```
    error: the server doesn't have a resource type "grafana"
    error: the server doesn't have a resource type "grafana"
-   No resources found in mobb-aro-obs namespace.
-   ```
-
-
-### Resource Locker Operator
-
-1. Deploy the Resource Locker Operator
-
-   ```bash
-   # Create the namespace `resource-locker-operator`
-   oc create namespace resource-locker-operator
-   # Create a file containing the Grafana operator
-   cat <<EOF > $WORKDIR/resource-locker-operator.yaml
-   subscriptions:
-   - name: resource-locker-operator
-     channel: alpha
-     installPlanApproval: Automatic
-     source: community-operators
-     sourceNamespace: openshift-marketplace
-     namespace: resource-locker-operator
-   operatorGroups:
-   - name: resource-locker
-     namespace: resource-locker-operator
-     targetNamespace: all
-   EOF
-   # Deploy the Resource Locker Operator using Helm
-   helm upgrade -n resource-locker-operator resource-locker-operator \
-      mobb/operatorhub --install \
-      --values "${WORKDIR}"/resource-locker-operator.yaml
-   # Wait for the Operators to be installed
-   while ! oc get resourcelocker; do sleep 5; echo -n .; done
-   ```
-
-   After a few minutes you should see the following
-
-   ```
-   error: the server doesn't have a resource type "resourcelocker"
-   error: the server doesn't have a resource type "resourcelocker"
    No resources found in mobb-aro-obs namespace.
    ```
 
@@ -291,7 +259,7 @@ Next we can configure Metrics Federation to Azure Blob Storage. This is done by 
       --set "aro.storageAccountKey=${AZR_STORAGE_KEY}" \
       --set "aro.storageContainer=${CLUSTER}-metrics" \
       --set "enableUserWorkloadMetrics=true"
-  ```
+   ```
 
 ## Configure Logs Federation to Azure Blob Storage
 
@@ -302,10 +270,21 @@ Next we need to deploy the Cluster Logging and Loki Operators so that we can use
 1. Deploy the cluster logging and loki operators
 
    ```bash
-   # Create nanespaces
+   # Create namespaces
    oc create ns openshift-logging
    oc create ns openshift-operators-redhat
-   # Configure and deploy operators
+   ```
+   > Note: The token created below is the Bearer token for the grafana service account in the openshift-logging namespace that is used for the Loki datasources. The duration below is for one year, but adjust this time to use a shorter/longer lived token
+   ```
+   oc create sa grafana -n openshift-logging
+   export TOKEN=`oc create token grafana --duration=8760h -n openshift-logging`
+   ```
+   
+   ```
+   export SERVICEACCOUNT=`oc get grafana -n ${NAMESPACE} -o custom-columns=NAME:.metadata.name | tail -n +2`
+   ```
+   ## Configure and deploy operators
+   ```
    mkdir -p "${WORKDIR}/logs"
    cat << EOF > "${WORKDIR}/logs/log-operators.yaml"
    subscriptions:
@@ -315,14 +294,14 @@ Next we need to deploy the Cluster Logging and Loki Operators so that we can use
      source: redhat-operators
      sourceNamespace: openshift-marketplace
      namespace: openshift-logging
-     startingCSV: cluster-logging.5.5.2
+     startingCSV: cluster-logging.5.9.0
    - name: loki-operator
      channel: stable
      installPlanApproval: Automatic
      source: redhat-operators
      sourceNamespace: openshift-marketplace
      namespace: openshift-operators-redhat
-     startingCSV: loki-operator.5.5.2
+     startingCSV: loki-operator.5.9.0
    operatorGroups:
    - name: openshift-logging
      namespace: openshift-logging
@@ -351,7 +330,9 @@ Next we need to deploy the Cluster Logging and Loki Operators so that we can use
       --install mobb/aro-clf-blob \
       --set "azure.storageAccount=${AZR_STORAGE_ACCOUNT_NAME}" \
       --set "azure.storageAccountKey=${AZR_STORAGE_KEY}" \
-      --set "azure.storageContainer=${CLUSTER}-logs"
+      --set "azure.storageContainer=${CLUSTER}-logs" \
+      --set "bearertoken=${TOKEN}" \
+      --set "serviceaccount=${SERVICEACCOUNT}"
    ```
 
 1. Wait for the logging stack to come online
