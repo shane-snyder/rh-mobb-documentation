@@ -11,6 +11,12 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 
 ### ROSA
 
+#### Hosted Control Plane (HCP)
+
+* [Deploying a ROSA HCP cluster with Terraform](/experts/rosa/terraform/hcp/)
+
+#### Classic
+
 * [Prerequisites Checklist to Deploy ROSA Cluster with STS](/experts/rosa/prereq-list)
 * [Deploying ROSA in PrivateLink mode](/experts/rosa/private-link)
   * [Add Public Ingress to PrivateLink Cluster](/experts/rosa/private-link/public-ingress)
@@ -19,6 +25,7 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 * [Deploying ROSA in STS mode with PrivateLink](/experts/rosa/sts-with-private-link)
 * [Deploying ROSA in STS mode with custom KMS Key](/experts/rosa/kms)
 * [Deploying ROSA via CRD and GitOps](/experts/rosa/rosa-gitops)
+* [ROSA IP addressing best practices](/experts/rosa/ip-addressing-and-subnets)
 * [Installing the AWS Load Balancer Operator on ROSA](/experts/rosa/aws-load-balancer-operator)
 * [Assign Egress IP for External Traffic](/experts/rosa/egress-ip)
 * [Adding AWS WAF in front of ROSA / OSD](/experts/rosa/waf/)
@@ -33,6 +40,7 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 * [Verify Required Permissions for a ROSA STS deployment](/experts/rosa/verify-permissions)
 * [STS OIDC flow in ROSA Operators](/experts/rosa/sts-oidc-flow)
 * [Dynamic Certificates for ROSA Custom Domain](/experts/rosa/dynamic-certificates)
+* [Custom Domain for Component Routes](/experts/rosa/customizing-console-route)
 * [External DNS for ROSA Custom Domain](/experts/rosa/external-dns)
 * [Security Reference Architecture for ROSA](/experts/rosa/security-ra)
 * [Configure ROSA for Nvidia GPU Workloads](/experts/rosa/gpu)
@@ -42,6 +50,7 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 * [Add an Ingress Controller to ROSA with a custom domain](/experts/rosa/ingress-controller)
 * [Configuring AWS CLB Access Logging](/experts/rosa/clb-access-logging/)
 * [Migrating ROSA Ingress Controllers from a CLB to NLB](/experts/rosa/clb-to-nlb-migration/)
+* [Install Portworx on Red Hat OpenShift Service on AWS with hosted control planes](/experts/rosa/rosa-hcp-portworx/)
 
 ### ARO
 
@@ -80,6 +89,13 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 
 * [Deploy OSD in GCP using Pre-Existent VPC and Subnets](/experts/gcp/osd_preexisting_vpc)
 * [Using Filestore with OpenShift Dedicated in GCP](/experts/gcp/filestore)
+
+## OpenShift Virtualization
+
+* Deploy OpenShift Virtualization on Red Hat OpenShift on AWS (ROSA)
+  * [via CLI](/experts/rosa/ocp-virt/basic)
+  * [via GUI](/experts/rosa/ocp-virt/basic-gui)
+* [Deploy OpenShift Virtualization on Red Hat OpenShift on AWS (ROSA) with Netapp FSx CSI Driver](/experts/rosa/ocp-virt/with-fsx)
 
 ## Advanced Cluster Manager (ACM)
 
@@ -150,6 +166,7 @@ description: "Step-by-step tutorials from Red Hat experts to help you get the mo
 * [Deploy OpenShift Advanced Data Protection on a ROSA STS cluster](/experts/misc/oadp/rosa-sts/)
 * [Azure DevOps with Managed OpenShift](/experts/misc/azure-dev-ops-with-managed-openshift/)
 * [Configuring OpenShift Dev Spaces to serve Custom Domains](/experts/misc/devspaces-custom-domain)
+* [Running and Deploying LLMs using Red Hat OpenShift AI on ROSA cluster and Storing the Model in Amazon S3 Bucket](/experts/misc/rhoai-s3)
 
 ## Fixes / Workarounds
 
